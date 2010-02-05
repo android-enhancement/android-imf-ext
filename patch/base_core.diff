@@ -1,0 +1,246 @@
+diff -cr android-ws.org/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java android-ws/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java
+*** android-ws.org/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java	2010-01-28 17:59:42.714563301 +0900
+--- android-ws/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java	2010-01-30 04:47:25.772193017 +0900
+***************
+*** 214,220 ****
+   */
+  public class InputMethodService extends AbstractInputMethodService {
+      static final String TAG = "InputMethodService";
+!     static final boolean DEBUG = false;
+      
+      InputMethodManager mImm;
+      
+--- 214,220 ----
+   */
+  public class InputMethodService extends AbstractInputMethodService {
+      static final String TAG = "InputMethodService";
+!     static final boolean DEBUG = true;
+      
+      InputMethodManager mImm;
+      
+diff -cr android-ws.org/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java android-ws/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java
+*** android-ws.org/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java	2010-01-28 17:59:42.714563301 +0900
+--- android-ws/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java	2010-02-02 21:10:31.434360975 +0900
+***************
+*** 48,53 ****
+--- 48,54 ----
+  import java.util.List;
+  import java.util.concurrent.CountDownLatch;
+  import java.util.concurrent.TimeUnit;
++ import java.util.HashMap;
+  
+  /**
+   * Central system API to the overall input method framework (IMF) architecture,
+***************
+*** 188,194 ****
+   * </ul>
+   */
+  public final class InputMethodManager {
+!     static final boolean DEBUG = false;
+      static final String TAG = "InputMethodManager";
+  
+      static final Object mInstanceSync = new Object();
+--- 189,195 ----
+   * </ul>
+   */
+  public final class InputMethodManager {
+!     static final boolean DEBUG = true;
+      static final String TAG = "InputMethodManager";
+  
+      static final Object mInstanceSync = new Object();
+***************
+*** 286,291 ****
+--- 287,295 ----
+      IInputMethodSession mCurMethod;
+  
+      // -----------------------------------------------------------
++ //IMF extension
++     final HashMap<View, IInputContext> mContexes = new HashMap<View, IInputContext>();
++ // IMF extension    
+      
+      static final int MSG_DUMP = 1;
+      static final int MSG_BIND = 2;
+***************
+*** 956,977 ****
+              // If we already have a text box, then this view is already
+              // connected so we want to restart it.
+              final boolean initial = mCurrentTextBoxAttribute == null;
+!             
+              // Hook 'em up and let 'er rip.
+              mCurrentTextBoxAttribute = tba;
+              mServedConnecting = false;
+              mServedInputConnection = ic;
+!             IInputContext servedContext;
+              if (ic != null) {
+                  mCursorSelStart = tba.initialSelStart;
+                  mCursorSelEnd = tba.initialSelEnd;
+                  mCursorCandStart = -1;
+                  mCursorCandEnd = -1;
+                  mCursorRect.setEmpty();
+!                 servedContext = new ControlledInputConnectionWrapper(vh.getLooper(), ic);
+              } else {
+                  servedContext = null;
+              }
+              
+              try {
+                  if (DEBUG) Log.v(TAG, "START INPUT: " + view + " ic="
+--- 960,986 ----
+              // If we already have a text box, then this view is already
+              // connected so we want to restart it.
+              final boolean initial = mCurrentTextBoxAttribute == null;
+! // IMF extension            
+! // M.Uno 2010/2/1
+              // Hook 'em up and let 'er rip.
+              mCurrentTextBoxAttribute = tba;
+              mServedConnecting = false;
+              mServedInputConnection = ic;
+!             IInputContext servedContext = this.mContexes.get(view);
+              if (ic != null) {
+                  mCursorSelStart = tba.initialSelStart;
+                  mCursorSelEnd = tba.initialSelEnd;
+                  mCursorCandStart = -1;
+                  mCursorCandEnd = -1;
+                  mCursorRect.setEmpty();
+!                 if (servedContext == null) {
+!                 	servedContext = new ControlledInputConnectionWrapper(vh.getLooper(), ic);
+!                 	this.mContexes.put(view, servedContext);
+!                 }
+              } else {
+                  servedContext = null;
+              }
++ // IMF extension            
+              
+              try {
+                  if (DEBUG) Log.v(TAG, "START INPUT: " + view + " ic="
+diff -cr android-ws.org/frameworks/base/core/java/android/widget/TextView.java android-ws/frameworks/base/core/java/android/widget/TextView.java
+*** android-ws.org/frameworks/base/core/java/android/widget/TextView.java	2010-01-28 17:59:42.724562838 +0900
+--- android-ws/frameworks/base/core/java/android/widget/TextView.java	2010-02-02 21:09:56.244713833 +0900
+***************
+*** 280,285 ****
+--- 280,288 ----
+      }
+      InputMethodState mInputMethodState;
+  
++ // IMF extension    
++     InputConnection mInputConnection;
++ // IMF extension    
+      /*
+       * Kick-start the font cache for the zygote process (to pay the cost of
+       * initializing freetype for our default font only once).
+***************
+*** 320,331 ****
+          this(context, attrs, com.android.internal.R.attr.textViewStyle);
+      }
+  
+      public TextView(Context context,
+                      AttributeSet attrs,
+                      int defStyle) {
+          super(context, attrs, defStyle);
+          mText = "";
+! 
+          mTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+          mTextPaint.density = getResources().getDisplayMetrics().density;
+          mTextPaint.setCompatibilityScaling(
+--- 323,344 ----
+          this(context, attrs, com.android.internal.R.attr.textViewStyle);
+      }
+  
++     void dumpAttributeSet(AttributeSet attrs) {
++     	if (attrs == null) return;
++     	int count = attrs.getAttributeCount();
++ 		Log.i(TAG, " dump attributeset:  count = " + count);
++     	for (int i = 0; i < count; i++) {
++     		Log.i(TAG, "    name = " + attrs.getAttributeName(i) + "  value = "+ attrs.getAttributeValue(i));
++     	}
++     }
+      public TextView(Context context,
+                      AttributeSet attrs,
+                      int defStyle) {
+          super(context, attrs, defStyle);
+          mText = "";
+! // IMF extension
+! //        dumpAttributeSet(attrs);
+! // IMF extension        
+          mTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+          mTextPaint.density = getResources().getDisplayMetrics().density;
+          mTextPaint.setCompatibilityScaling(
+***************
+*** 432,437 ****
+--- 445,451 ----
+          for (int i = 0; i < n; i++) {
+              int attr = a.getIndex(i);
+  
++ //            Log.i(TAG, "attr = " + attr);
+              switch (attr) {
+              case com.android.internal.R.styleable.TextView_editable:
+                  editable = a.getBoolean(attr, editable);
+***************
+*** 439,444 ****
+--- 453,459 ----
+  
+              case com.android.internal.R.styleable.TextView_inputMethod:
+                  inputMethod = a.getText(attr);
++             	Log.i(TAG, "TextView_inputMethod = " + inputMethod);
+                  break;
+  
+              case com.android.internal.R.styleable.TextView_numeric:
+***************
+*** 713,719 ****
+          }
+  
+          if (inputMethod != null) {
+!             Class c;
+  
+              try {
+                  c = Class.forName(inputMethod.toString());
+--- 728,734 ----
+          }
+  
+          if (inputMethod != null) {
+!          	Class c;
+  
+              try {
+                  c = Class.forName(inputMethod.toString());
+***************
+*** 4476,4482 ****
+              }
+              outAttrs.hintText = mHint;
+              if (mText instanceof Editable) {
+!                 InputConnection ic = new EditableInputConnection(this);
+                  outAttrs.initialSelStart = Selection.getSelectionStart(mText);
+                  outAttrs.initialSelEnd = Selection.getSelectionEnd(mText);
+                  outAttrs.initialCapsMode = ic.getCursorCapsMode(mInputType);
+--- 4491,4499 ----
+              }
+              outAttrs.hintText = mHint;
+              if (mText instanceof Editable) {
+!             	// IMF extension
+!             	InputConnection ic = getInputConnection();
+!             	// IMF extension
+                  outAttrs.initialSelStart = Selection.getSelectionStart(mText);
+                  outAttrs.initialSelEnd = Selection.getSelectionEnd(mText);
+                  outAttrs.initialCapsMode = ic.getCursorCapsMode(mInputType);
+***************
+*** 4485,4491 ****
+          }
+          return null;
+      }
+! 
+      /**
+       * If this TextView contains editable content, extract a portion of it
+       * based on the information in <var>request</var> in to <var>outText</var>.
+--- 4502,4515 ----
+          }
+          return null;
+      }
+! // IMF extension
+! // M.Uno 2010/01/29    
+!     InputConnection getInputConnection() {
+!     	if (mInputConnection != null) return mInputConnection;
+!     	mInputConnection = new EditableInputConnection(this);
+!     	return mInputConnection;
+!     }
+! // IMF extension
+      /**
+       * If this TextView contains editable content, extract a portion of it
+       * based on the information in <var>request</var> in to <var>outText</var>.

@@ -1,0 +1,782 @@
+diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMethodManagerService.java android-ws/frameworks/base/services/java/com/android/server/InputMethodManagerService.java
+*** android-ws.org/frameworks/base/services/java/com/android/server/InputMethodManagerService.java	2010-01-28 17:59:42.604000849 +0900
+--- android-ws/frameworks/base/services/java/com/android/server/InputMethodManagerService.java	2010-02-03 00:44:20.905329688 +0900
+***************
+*** 79,91 ****
+  import java.util.ArrayList;
+  import java.util.HashMap;
+  import java.util.List;
+  
+  /**
+   * This class provides a system service that manages input methods.
+   */
+  public class InputMethodManagerService extends IInputMethodManager.Stub
+          implements ServiceConnection, Handler.Callback {
+!     static final boolean DEBUG = false;
+      static final String TAG = "InputManagerService";
+  
+      static final int MSG_SHOW_IM_PICKER = 1;
+--- 79,92 ----
+  import java.util.ArrayList;
+  import java.util.HashMap;
+  import java.util.List;
++ import java.util.Locale;
+  
+  /**
+   * This class provides a system service that manages input methods.
+   */
+  public class InputMethodManagerService extends IInputMethodManager.Stub
+          implements ServiceConnection, Handler.Callback {
+!     static final boolean DEBUG = true;
+      static final String TAG = "InputManagerService";
+  
+      static final int MSG_SHOW_IM_PICKER = 1;
+***************
+*** 128,141 ****
+--- 129,146 ----
+      final TextUtils.SimpleStringSplitter mStringColonSplitter
+              = new TextUtils.SimpleStringSplitter(':');
+      
++  // IMF extension
++  // M.Uno 2010/2/1
+      class SessionState {
+          final ClientState client;
++         final String methodId;
+          final IInputMethod method;
+          final IInputMethodSession session;
+          
+          @Override
+          public String toString() {
+              return "SessionState{uid " + client.uid + " pid " + client.pid
++                     + " method id " + methodId
+                      + " method " + Integer.toHexString(
+                              System.identityHashCode(method))
+                      + " session " + Integer.toHexString(
+***************
+*** 143,155 ****
+                      + "}";
+          }
+  
+!         SessionState(ClientState _client, IInputMethod _method,
+                  IInputMethodSession _session) {
+              client = _client;
+              method = _method;
+              session = _session;
+          }
+      }
+      
+      class ClientState {
+          final IInputMethodClient client;
+--- 148,162 ----
+                      + "}";
+          }
+  
+!         SessionState(ClientState _client, String _methodId, IInputMethod _method,
+                  IInputMethodSession _session) {
+              client = _client;
++             methodId = _methodId;
+              method = _method;
+              session = _session;
+          }
+      }
++  // IMF extension
+      
+      class ClientState {
+          final IInputMethodClient client;
+***************
+*** 180,185 ****
+--- 187,199 ----
+      
+      final HashMap<IBinder, ClientState> mClients
+              = new HashMap<IBinder, ClientState>();
++ 
++ // IMF extension
++ // M.Uno 2010/2/1
++     final HashMap<String, SessionState> mSessions = new HashMap<String, SessionState>();
++     final HashMap<IBinder, SessionState> mConnections = new HashMap<IBinder, SessionState>();
++     boolean mChangingIME = false; 
++ // IMF extension
+      
+      /**
+       * Set once the system is ready to run third party code.
+***************
+*** 390,395 ****
+--- 404,422 ----
+              }
+          }
+      }
++ // IMF extension
++ // M. Uno 2010/1/25
++     class ConfigurationChangeReceiver extends android.content.BroadcastReceiver {
++         @Override
++         public void onReceive(Context context, Intent intent) {
++             String action = intent.getAction();
++             if (Intent.ACTION_CONFIGURATION_CHANGED.equals(action)) {
++             	mCurMethodId = getDefaultIME();
++                 updateFromSettingsLocked();
++             }            
++         }
++     }
++ // IMF extension
+      
+      class MethodCallback extends IInputMethodCallback.Stub {
+          final IInputMethod mMethod;
+***************
+*** 430,435 ****
+--- 457,469 ----
+          screenOnOffFilt.addAction(Intent.ACTION_SCREEN_OFF);
+          screenOnOffFilt.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+          mContext.registerReceiver(new ScreenOnOffReceiver(), screenOnOffFilt);
++ 
++ // IMF extension
++ // M. Uno 2010/1/25
++         IntentFilter configChangedFilt = new IntentFilter();
++         configChangedFilt.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
++         mContext.registerReceiver(new ConfigurationChangeReceiver(), configChangedFilt);
++ // IMF extension
+          
+          buildInputMethodListLocked(mMethodList, mMethodMap);
+  
+***************
+*** 544,563 ****
+  
+      public void addClient(IInputMethodClient client,
+              IInputContext inputContext, int uid, int pid) {
+!         synchronized (mMethodMap) {
+              mClients.put(client.asBinder(), new ClientState(client,
+                      inputContext, uid, pid));
+          }
+      }
+      
+      public void removeClient(IInputMethodClient client) {
+          synchronized (mMethodMap) {
+              mClients.remove(client.asBinder());
+          }
+      }
+      
+      void executeOrSendMessage(IInterface target, Message msg) {
+!          if (target.asBinder() instanceof Binder) {
+               mCaller.sendMessage(msg);
+           } else {
+               handleMessage(msg);
+--- 578,607 ----
+  
+      public void addClient(IInputMethodClient client,
+              IInputContext inputContext, int uid, int pid) {
+!        if (DEBUG) {
+!            if (inputContext == null) {
+!                Log.i(TAG, "addClient: client = " + client.asBinder() + " uid = " + uid + " pid = " + pid);
+!            } else {
+!                Log.i(TAG, "addClient: client = " + client.asBinder() + " context = " + inputContext.asBinder() + " uid = " + uid + " pid = " + pid);
+!                
+!            }
+!        }
+!        synchronized (mMethodMap) {
+              mClients.put(client.asBinder(), new ClientState(client,
+                      inputContext, uid, pid));
+          }
+      }
+      
+      public void removeClient(IInputMethodClient client) {
++         if (DEBUG) Log.i(TAG, "removeClient: client = " + client.asBinder());
+          synchronized (mMethodMap) {
+              mClients.remove(client.asBinder());
+          }
+      }
+      
+      void executeOrSendMessage(IInterface target, Message msg) {
+!         if (DEBUG) Log.i(TAG, "executeOrSendMessage: msg = " + msg.what);
+!         if (target.asBinder() instanceof Binder) {
+               mCaller.sendMessage(msg);
+           } else {
+               handleMessage(msg);
+***************
+*** 566,571 ****
+--- 610,616 ----
+      }
+      
+      void unbindCurrentClientLocked() {
++         if (DEBUG) Log.i(TAG, "unbindCurrentClientLocked:");
+          if (mCurClient != null) {
+              if (DEBUG) Log.v(TAG, "unbindCurrentInputLocked: client = "
+                      + mCurClient.client.asBinder());
+***************
+*** 594,599 ****
+--- 639,645 ----
+      }
+      
+      private int getImeShowFlags() {
++         if (DEBUG) Log.i(TAG, "getImeShowFlags:");
+          int flags = 0;
+          if (mShowForced) {
+              flags |= InputMethod.SHOW_FORCED
+***************
+*** 605,610 ****
+--- 651,657 ----
+      }
+      
+      private int getAppShowFlags() {
++         if (DEBUG) Log.i(TAG, "getAppShowFlags:");
+          int flags = 0;
+          if (mShowForced) {
+              flags |= InputMethodManager.SHOW_FORCED;
+***************
+*** 615,624 ****
+      }
+      
+      InputBindResult attachNewInputLocked(boolean initial, boolean needResult) {
+          if (!mBoundToMethod) {
+!             executeOrSendMessage(mCurMethod, mCaller.obtainMessageOO(
+                      MSG_BIND_INPUT, mCurMethod, mCurClient.binding));
+!             mBoundToMethod = true;
+          }
+          final SessionState session = mCurClient.curSession;
+          if (initial) {
+--- 662,672 ----
+      }
+      
+      InputBindResult attachNewInputLocked(boolean initial, boolean needResult) {
++         if (DEBUG) Log.i(TAG, "attachNewInputLocked:");
+          if (!mBoundToMethod) {
+!         	executeOrSendMessage(mCurMethod, mCaller.obtainMessageOO(
+                      MSG_BIND_INPUT, mCurMethod, mCurClient.binding));
+!         	mBoundToMethod = true;
+          }
+          final SessionState session = mCurClient.curSession;
+          if (initial) {
+***************
+*** 640,645 ****
+--- 688,700 ----
+      InputBindResult startInputLocked(IInputMethodClient client,
+              IInputContext inputContext, EditorInfo attribute,
+              boolean initial, boolean needResult) {
++         if (DEBUG) {
++             if (inputContext == null) {
++                 Log.i(TAG, "startInputLocked: client = " + client.asBinder() + " context = " );
++             } else {
++                 Log.i(TAG, "startInputLocked: client = " + client.asBinder() + " context = " + inputContext.asBinder());
++             }
++         }
+          // If no method is currently selected, do nothing.
+          if (mCurMethodId == null) {
+              return mNoBinding;
+***************
+*** 730,735 ****
+--- 785,791 ----
+      }
+      
+      InputBindResult startInputInnerLocked() {
++         if (DEBUG) Log.i(TAG, "startInputInnerLocked:");
+          if (mCurMethodId == null) {
+              return mNoBinding;
+          }
+***************
+*** 776,796 ****
+      public InputBindResult startInput(IInputMethodClient client,
+              IInputContext inputContext, EditorInfo attribute,
+              boolean initial, boolean needResult) {
+          synchronized (mMethodMap) {
+              final long ident = Binder.clearCallingIdentity();
+              try {
+!                 return startInputLocked(client, inputContext, attribute,
+                          initial, needResult);
+              } finally {
+                  Binder.restoreCallingIdentity(ident);
+              }
+          }
+      }
+      
+      public void finishInput(IInputMethodClient client) {
+      }
+      
+      public void onServiceConnected(ComponentName name, IBinder service) {
+          synchronized (mMethodMap) {
+              if (mCurIntent != null && name.equals(mCurIntent.getComponent())) {
+                  mCurMethod = IInputMethod.Stub.asInterface(service);
+--- 832,910 ----
+      public InputBindResult startInput(IInputMethodClient client,
+              IInputContext inputContext, EditorInfo attribute,
+              boolean initial, boolean needResult) {
++         if (DEBUG) {
++             if (inputContext == null) {
++                 Log.i(TAG, "startInput: client = " + client.asBinder() + " context: ");
++             } else {
++                 if (DEBUG) Log.i(TAG, "startInput: client = " + client.asBinder() + " context: " + inputContext.asBinder());
++             }
++             if (DEBUG && attribute != null) { 
++             	Log.i(TAG, "    attribute: name = " + attribute.fieldName + " id = " + attribute.fieldId + " package = " + attribute.packageName + " label = " + attribute.label);
++             	Log.i(TAG, "    attribute: privateImeOptions = " + attribute.privateImeOptions);
++             }
++         }
+          synchronized (mMethodMap) {
+              final long ident = Binder.clearCallingIdentity();
+              try {
+!             	if (inputContext != null) {
+!             		updateSession(inputContext.asBinder(), attribute);
+!             	}
+!             	return startInputLocked(client, inputContext, attribute,
+                          initial, needResult);
+              } finally {
+                  Binder.restoreCallingIdentity(ident);
+              }
+          }
+      }
++  // IMF extension
++     private String getLanguageSpecified(EditorInfo editorInfo) {
++     	if (editorInfo == null) return null;
++     	return editorInfo.privateImeOptions;
++     }
++     private void updateSession(IBinder context, EditorInfo editorInfo) {
++         if (DEBUG) Log.i(TAG, "updateSession: context = " + context);
++     	if (context == null) return;
++     	
++     	SessionState sessionStatus = this.mConnections.get(context);
++     	if (sessionStatus == null) {
++             if (DEBUG) Log.i(TAG, "  The context is not connected to a session... sesseion = " + this.mCurClient.curSession);
++             
++             // Is language specified?
++             String langId = getLanguageSpecified(editorInfo);
++             String methodId = this.getDefaultIME(langId);
++             if (DEBUG) Log.i(TAG, "  requested ime = " + langId);
++             if (langId == null || methodId.equalsIgnoreCase(this.mCurMethodId)) {
++             	// connecting to the current session.
++             	if (this.mCurClient != null)
++             		this.mConnections.put(context, this.mCurClient.curSession);           	
++             }
++             
++ 
++             // get the session for IME 
++             sessionStatus = this.mSessions.get(methodId);
++             if (sessionStatus == null) {
++             	// The IME has not activated yet.
++             	this.mCurMethodId = methodId;
++         		return;
++             }
++     	}
++     	
++     	if (!this.mChangingIME && !sessionStatus.methodId.equalsIgnoreCase(this.mCurMethodId)) {
++         	if (DEBUG) {
++                 Log.i(TAG, " restore the session that was already connected... session = " + sessionStatus);
++         		Log.i(TAG, "    from = " + this.mCurMethodId + " to = " + sessionStatus.methodId);
++         	}
++     		this.mCurMethodId = sessionStatus.methodId;
++     		this.mCurMethod   = sessionStatus.method;
++     	}
++     }
++  // IMF extension
+      
+      public void finishInput(IInputMethodClient client) {
+      }
+      
+      public void onServiceConnected(ComponentName name, IBinder service) {
++         if (DEBUG) Log.i(TAG, "onServiceConnected: name = " + name);
+          synchronized (mMethodMap) {
+              if (mCurIntent != null && name.equals(mCurIntent.getComponent())) {
+                  mCurMethod = IInputMethod.Stub.asInterface(service);
+***************
+*** 814,826 ****
+      }
+  
+      void onSessionCreated(IInputMethod method, IInputMethodSession session) {
+!         synchronized (mMethodMap) {
+              if (mCurMethod != null && method != null
+                      && mCurMethod.asBinder() == method.asBinder()) {
+                  if (mCurClient != null) {
+                      mCurClient.curSession = new SessionState(mCurClient,
+!                             method, session);
+                      mCurClient.sessionRequested = false;
+                      InputBindResult res = attachNewInputLocked(true, true);
+                      if (res.method != null) {
+                          executeOrSendMessage(mCurClient.client, mCaller.obtainMessageOO(
+--- 928,952 ----
+      }
+  
+      void onSessionCreated(IInputMethod method, IInputMethodSession session) {
+!         if (DEBUG) Log.i(TAG, "onSessionCreated: method = " + method.asBinder() + " session = " + session.asBinder() + " method = " + mCurMethodId);
+!        synchronized (mMethodMap) {
+              if (mCurMethod != null && method != null
+                      && mCurMethod.asBinder() == method.asBinder()) {
+                  if (mCurClient != null) {
++                 	
++ // IMF extension
++ // M.Uno 2010/2/1
++                     if (DEBUG) Log.i(TAG, "curMethodId = " + this.mCurMethodId);
+                      mCurClient.curSession = new SessionState(mCurClient,
+!                             mCurMethodId, method, session);
+                      mCurClient.sessionRequested = false;
++                     if (this.mCurInputContext != null) {
++                         if (DEBUG) Log.i(TAG, "store session: context = " + this.mCurInputContext.asBinder() + " session = " + mCurClient.curSession + " session(old) = " + this.mConnections.get(this.mCurInputContext.asBinder()));
++                     	this.mConnections.put(this.mCurInputContext.asBinder(), mCurClient.curSession);
++                     }
++                     if (this.mSessions.put(this.mCurMethodId, mCurClient.curSession) != null)
++                     	Log.i(TAG, "update session? methodId = " + this.mCurMethodId);
++ // IMF extension
+                      InputBindResult res = attachNewInputLocked(true, true);
+                      if (res.method != null) {
+                          executeOrSendMessage(mCurClient.client, mCaller.obtainMessageOO(
+***************
+*** 829,842 ****
+                  }
+              }
+          }
+      }
+      
+      void unbindCurrentMethodLocked(boolean reportToClient) {
+          if (mHaveConnection) {
+!             mContext.unbindService(this);
+              mHaveConnection = false;
+          }
+!         
+          if (mCurToken != null) {
+              try {
+                  if (DEBUG) Log.v(TAG, "Removing window token: " + mCurToken);
+--- 955,978 ----
+                  }
+              }
+          }
++ // IMF extension
++        if (DEBUG) Log.i(TAG, "changing IME... done" + this.mCurMethodId);
++        this.mChangingIME = false;
++ // IMF extension
++ 
+      }
+      
+      void unbindCurrentMethodLocked(boolean reportToClient) {
++         if (DEBUG) Log.i(TAG, "unbindCurrentMethodLocked:");
+          if (mHaveConnection) {
+!         	mContext.unbindService(this);
+              mHaveConnection = false;
+          }
+! 
+!         if (DEBUG) {
+!             if (mCurToken != null) Log.i(TAG, "mCurToken = " + this.mCurToken.toString());
+!         }
+! 
+          if (mCurToken != null) {
+              try {
+                  if (DEBUG) Log.v(TAG, "Removing window token: " + mCurToken);
+***************
+*** 856,872 ****
+      }
+      
+      void clearCurMethodLocked() {
+          if (mCurMethod != null) {
+!             for (ClientState cs : mClients.values()) {
+                  cs.sessionRequested = false;
+                  cs.curSession = null;
+              }
+              mCurMethod = null;
+          }
+          mStatusBar.setIconVisibility(mInputMethodIcon, false);
+      }
+      
+      public void onServiceDisconnected(ComponentName name) {
+          synchronized (mMethodMap) {
+              if (DEBUG) Log.v(TAG, "Service disconnected: " + name
+                      + " mCurIntent=" + mCurIntent);
+--- 992,1015 ----
+      }
+      
+      void clearCurMethodLocked() {
++         if (DEBUG) Log.i(TAG, "clearCurMethodLocked:");
+          if (mCurMethod != null) {
+! // IMF extension
+! // M.Uno 2010/2/1
+! /*
+!         	for (ClientState cs : mClients.values()) {
+                  cs.sessionRequested = false;
+                  cs.curSession = null;
+              }
++ */
++ // IMF extension
+              mCurMethod = null;
+          }
+          mStatusBar.setIconVisibility(mInputMethodIcon, false);
+      }
+      
+      public void onServiceDisconnected(ComponentName name) {
++         if (DEBUG) Log.i(TAG, "onServiceDisconnected: name = " + name);
+          synchronized (mMethodMap) {
+              if (DEBUG) Log.v(TAG, "Service disconnected: " + name
+                      + " mCurIntent=" + mCurIntent);
+***************
+*** 887,892 ****
+--- 1030,1036 ----
+      }
+  
+      public void updateStatusIcon(IBinder token, String packageName, int iconId) {
++         if (DEBUG) Log.i(TAG, "updateStatusIcon: packageName = " + packageName);
+          long ident = Binder.clearCallingIdentity();
+          try {
+              if (token == null || mCurToken != token) {
+***************
+*** 910,923 ****
+              Binder.restoreCallingIdentity(ident);
+          }
+      }
+! 
+      void updateFromSettingsLocked() {
+!         // We are assuming that whoever is changing DEFAULT_INPUT_METHOD and
+          // ENABLED_INPUT_METHODS is taking care of keeping them correctly in
+          // sync, so we will never have a DEFAULT_INPUT_METHOD that is not
+          // enabled.
+!         String id = Settings.Secure.getString(mContext.getContentResolver(),
+!             Settings.Secure.DEFAULT_INPUT_METHOD);
+          if (id != null && id.length() > 0) {
+              try {
+                  setInputMethodLocked(id);
+--- 1054,1070 ----
+              Binder.restoreCallingIdentity(ident);
+          }
+      }
+! // IMF extension
+! // M. Uno 2010/1/25     
+      void updateFromSettingsLocked() {
+!         if (DEBUG) Log.i(TAG, "updateFromSettingsLocked:");
+!        // We are assuming that whoever is changing DEFAULT_INPUT_METHOD and
+          // ENABLED_INPUT_METHODS is taking care of keeping them correctly in
+          // sync, so we will never have a DEFAULT_INPUT_METHOD that is not
+          // enabled.
+! //        String id = Settings.Secure.getString(mContext.getContentResolver(),
+! //            Settings.Secure.DEFAULT_INPUT_METHOD);
+!         String id = this.getDefaultIME();
+          if (id != null && id.length() > 0) {
+              try {
+                  setInputMethodLocked(id);
+***************
+*** 933,939 ****
+--- 1080,1116 ----
+          }
+      }
+      
++     // get Default IME for current language
++     String getDefaultIME() {
++         if (DEBUG) Log.i(TAG, "getDefaultIME:");
++         
++         if (this.mCurMethodId != null) return this.mCurMethodId;
++         
++         Locale locale = Locale.getDefault();
++         String id = this.getDefaultIME(locale.getLanguage());
++         Log.i(TAG, "get default IME: lang = " + locale.getLanguage() + ", id = " + id);
++         return id;
++     }
++     
++     // get Default IME for language
++     // What if one more IMEs for a language?
++     // [TODO]This table will be stored in Database.
++     String getDefaultIME(String lang) {
++     	if (lang == null)
++     		lang = Locale.getDefault().getLanguage();
++     	
++         String id = "com.android.inputmethod.latin/.LatinIME";
++         if ("ja".equalsIgnoreCase(lang)) {
++             id = "jp.co.omronsoft.openwnn/.OpenWnnJAJP";
++             
++         } else if ("zh".equalsIgnoreCase(lang)) {
++             id = "com.android.inputmethod.pinyin/.PinyinIME";
++         } 
++         return id;
++     }
++ // IMF extension    
+      void setInputMethodLocked(String id) {
++         if (DEBUG) Log.i(TAG, "setInputMethodLocked: id = " + id);
+          InputMethodInfo info = mMethodMap.get(id);
+          if (info == null) {
+              throw new IllegalArgumentException("Unknown id: " + mCurMethodId);
+***************
+*** 942,955 ****
+          if (id.equals(mCurMethodId)) {
+              return;
+          }
+!         
+          final long ident = Binder.clearCallingIdentity();
+          try {
+              mCurMethodId = id;
+              Settings.Secure.putString(mContext.getContentResolver(),
+                  Settings.Secure.DEFAULT_INPUT_METHOD, id);
+  
+              if (ActivityManagerNative.isSystemReady()) {
+                  Intent intent = new Intent(Intent.ACTION_INPUT_METHOD_CHANGED);
+                  intent.putExtra("input_method_id", id);
+                  mContext.sendBroadcast(intent);
+--- 1119,1141 ----
+          if (id.equals(mCurMethodId)) {
+              return;
+          }
+! 
+          final long ident = Binder.clearCallingIdentity();
+          try {
++         	if (DEBUG)
++         		Log.i(TAG, " updateInputMethod: from =  " + mCurMethodId + " to = " + id);
+              mCurMethodId = id;
+              Settings.Secure.putString(mContext.getContentResolver(),
+                  Settings.Secure.DEFAULT_INPUT_METHOD, id);
++             
++ //            if (this.mCurInputContext != null)
++ //	            	this.mConnections.remove(this.mCurInputContext.asBinder());
+  
+              if (ActivityManagerNative.isSystemReady()) {
++ // IMF extension
++             	this.mChangingIME = true;
++             	if (DEBUG) Log.i(TAG, "changing IME... id = " + id);
++ // IMF extension
+                  Intent intent = new Intent(Intent.ACTION_INPUT_METHOD_CHANGED);
+                  intent.putExtra("input_method_id", id);
+                  mContext.sendBroadcast(intent);
+***************
+*** 962,967 ****
+--- 1148,1154 ----
+      
+      public boolean showSoftInput(IInputMethodClient client, int flags,
+              ResultReceiver resultReceiver) {
++         if (DEBUG) Log.i(TAG, "showSoftInput: client = " + client.asBinder());
+          long ident = Binder.clearCallingIdentity();
+          try {
+              synchronized (mMethodMap) {
+***************
+*** 989,994 ****
+--- 1176,1182 ----
+      }
+      
+      boolean showCurrentInputLocked(int flags, ResultReceiver resultReceiver) {
++         if (DEBUG) Log.i(TAG, "showCurrentInputLocked:");
+          mShowRequested = true;
+          if ((flags&InputMethodManager.SHOW_IMPLICIT) == 0) {
+              mShowExplicitlyRequested = true;
+***************
+*** 1026,1031 ****
+--- 1214,1220 ----
+      
+      public boolean hideSoftInput(IInputMethodClient client, int flags,
+              ResultReceiver resultReceiver) {
++         if (DEBUG) Log.i(TAG, "hideSoftInput: client = " + client.asBinder());
+          long ident = Binder.clearCallingIdentity();
+          try {
+              synchronized (mMethodMap) {
+***************
+*** 1053,1058 ****
+--- 1242,1248 ----
+      }
+      
+      boolean hideCurrentInputLocked(int flags, ResultReceiver resultReceiver) {
++         if (DEBUG) Log.i(TAG, "hideCurrentInputLocked:");
+          if ((flags&InputMethodManager.HIDE_IMPLICIT_ONLY) != 0
+                  && (mShowExplicitlyRequested || mShowForced)) {
+              if (DEBUG) Log.v(TAG,
+***************
+*** 1082,1087 ****
+--- 1272,1278 ----
+      public void windowGainedFocus(IInputMethodClient client, IBinder windowToken,
+              boolean viewHasFocus, boolean isTextEditor, int softInputMode,
+              boolean first, int windowFlags) {
++         if (DEBUG) Log.i(TAG, "windowGainedFocus: client = " + client.asBinder() + " token = " + windowToken.toString());
+          long ident = Binder.clearCallingIdentity();
+          try {
+              synchronized (mMethodMap) {
+***************
+*** 1168,1173 ****
+--- 1359,1365 ----
+      }
+      
+      public void showInputMethodPickerFromClient(IInputMethodClient client) {
++         if (DEBUG) Log.i(TAG, "showInputMethodPickerFromClient: client = " + client.asBinder());
+          synchronized (mMethodMap) {
+              if (mCurClient == null || client == null
+                      || mCurClient.client.asBinder() != client.asBinder()) {
+***************
+*** 1179,1184 ****
+--- 1371,1377 ----
+      }
+  
+      public void setInputMethod(IBinder token, String id) {
++         if (DEBUG) Log.i(TAG, "setInputMethod: token = " + token.toString() + " id = " + id);
+          synchronized (mMethodMap) {
+              if (token == null) {
+                  if (mContext.checkCallingOrSelfPermission(
+***************
+*** 1203,1208 ****
+--- 1396,1402 ----
+      }
+  
+      public void hideMySoftInput(IBinder token, int flags) {
++         if (DEBUG) Log.i(TAG, "hideMySoftInput: token = " + token.toString());
+          synchronized (mMethodMap) {
+              if (token == null || mCurToken != token) {
+                  Log.w(TAG, "Ignoring hideInputMethod of token: " + token);
+***************
+*** 1218,1223 ****
+--- 1412,1418 ----
+      }
+      
+      public void showMySoftInput(IBinder token, int flags) {
++         if (DEBUG) Log.i(TAG, "showMySoftInput: token = " + token.toString());
+          synchronized (mMethodMap) {
+              if (token == null || mCurToken != token) {
+                  Log.w(TAG, "Ignoring hideInputMethod of token: " + token);
+***************
+*** 1233,1238 ****
+--- 1428,1434 ----
+      }
+  
+      void setEnabledSessionInMainThread(SessionState session) {
++         if (DEBUG) Log.i(TAG, "setEnabledSessionInMainThread: session = " + session.toString());
+          if (mEnabledSession != session) {
+              if (mEnabledSession != null) {
+                  try {
+***************
+*** 1253,1258 ****
+--- 1449,1455 ----
+      }
+      
+      public boolean handleMessage(Message msg) {
++         if (DEBUG) Log.i(TAG, "handleMessage: msg = " + msg.what);
+          HandlerCaller.SomeArgs args;
+          switch (msg.what) {
+              case MSG_SHOW_IM_PICKER:
+***************
+*** 1353,1363 ****
+--- 1550,1563 ----
+      }
+  
+      private boolean isSystemIme(InputMethodInfo inputMethod) {
++         if (DEBUG) Log.i(TAG, "isSystemIme: inputMethod = " + inputMethod.getId());
+          return (inputMethod.getServiceInfo().applicationInfo.flags
+                  & ApplicationInfo.FLAG_SYSTEM) != 0;
+      }
+  
+      private boolean chooseNewDefaultIME() {
++         if (DEBUG) Log.i(TAG, "choose new default IME... ");
++ 
+          List<InputMethodInfo> enabled = getEnabledInputMethodListLocked();
+          if (enabled != null && enabled.size() > 0) {
+              Settings.Secure.putString(mContext.getContentResolver(),
+***************
+*** 1371,1376 ****
+--- 1571,1577 ----
+  
+      void buildInputMethodListLocked(ArrayList<InputMethodInfo> list,
+              HashMap<String, InputMethodInfo> map) {
++         if (DEBUG) Log.i(TAG, "buildInputMethodListLocked:");
+          list.clear();
+          map.clear();
+          
+***************
+*** 1500,1505 ****
+--- 1701,1707 ----
+      }
+      
+      void hideInputMethodMenu() {
++         if (DEBUG) Log.i(TAG, "hideInputMethodMenu:");
+          synchronized (mMethodMap) {
+              hideInputMethodMenuLocked();
+          }
+***************
+*** 1521,1526 ****
+--- 1723,1729 ----
+      // ----------------------------------------------------------------------
+      
+      public boolean setInputMethodEnabled(String id, boolean enabled) {
++             if (DEBUG) Log.i(TAG, "setInputMethodEnabled: id = " + id);
+          synchronized (mMethodMap) {
+              if (mContext.checkCallingOrSelfPermission(
+                      android.Manifest.permission.WRITE_SECURE_SETTINGS)
