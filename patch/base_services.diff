@@ -1,6 +1,6 @@
-diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMethodManagerService.java android-ws/frameworks/base/services/java/com/android/server/InputMethodManagerService.java
+diff -crN android-ws.org/frameworks/base/services/java/com/android/server/InputMethodManagerService.java android-ws/frameworks/base/services/java/com/android/server/InputMethodManagerService.java
 *** android-ws.org/frameworks/base/services/java/com/android/server/InputMethodManagerService.java	2010-01-28 17:59:42.604000849 +0900
---- android-ws/frameworks/base/services/java/com/android/server/InputMethodManagerService.java	2010-02-03 00:44:20.905329688 +0900
+--- android-ws/frameworks/base/services/java/com/android/server/InputMethodManagerService.java	2010-02-12 16:58:06.897608208 +0900
 ***************
 *** 79,91 ****
   import java.util.ArrayList;
@@ -37,8 +37,8 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
       final TextUtils.SimpleStringSplitter mStringColonSplitter
               = new TextUtils.SimpleStringSplitter(':');
       
-+  // IMF extension
-+  // M.Uno 2010/2/1
++ // IMF extension
++ // 2010/2/1
       class SessionState {
           final ClientState client;
 +         final String methodId;
@@ -91,7 +91,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               = new HashMap<IBinder, ClientState>();
 + 
 + // IMF extension
-+ // M.Uno 2010/2/1
++ // 2010/2/1
 +     final HashMap<String, SessionState> mSessions = new HashMap<String, SessionState>();
 +     final HashMap<IBinder, SessionState> mConnections = new HashMap<IBinder, SessionState>();
 +     boolean mChangingIME = false; 
@@ -129,7 +129,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           mContext.registerReceiver(new ScreenOnOffReceiver(), screenOnOffFilt);
 + 
 + // IMF extension
-+ // M. Uno 2010/1/25
++ // 2010/1/25
 +         IntentFilter configChangedFilt = new IntentFilter();
 +         configChangedFilt.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
 +         mContext.registerReceiver(new ConfigurationChangeReceiver(), configChangedFilt);
@@ -191,8 +191,8 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
            } else {
                handleMessage(msg);
 ***************
-*** 566,571 ****
---- 610,616 ----
+*** 566,574 ****
+--- 610,622 ----
       }
       
       void unbindCurrentClientLocked() {
@@ -200,9 +200,43 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           if (mCurClient != null) {
               if (DEBUG) Log.v(TAG, "unbindCurrentInputLocked: client = "
                       + mCurClient.client.asBinder());
++ // IMF extension
++ // 2010/210        
++ 
+              if (mBoundToMethod) {
+                  mBoundToMethod = false;
+                  if (mCurMethod != null) {
 ***************
-*** 594,599 ****
---- 639,645 ----
+*** 576,581 ****
+--- 624,630 ----
+                              MSG_UNBIND_INPUT, mCurMethod));
+                  }
+              }
++ // IMF extension
+              executeOrSendMessage(mCurClient.client, mCaller.obtainMessageIO(
+                      MSG_UNBIND_METHOD, mCurSeq, mCurClient.client));
+              mCurClient.sessionRequested = false;
+***************
+*** 588,599 ****
+                          + mCurClient.pid + " uid " + mCurClient.uid);
+              }
+              mCurClient = null;
+!             
+              hideInputMethodMenuLocked();
+          }
+      }
+      
+      private int getImeShowFlags() {
+          int flags = 0;
+          if (mShowForced) {
+              flags |= InputMethod.SHOW_FORCED
+--- 637,649 ----
+                          + mCurClient.pid + " uid " + mCurClient.uid);
+              }
+              mCurClient = null;
+! 
+              hideInputMethodMenuLocked();
+          }
       }
       
       private int getImeShowFlags() {
@@ -212,7 +246,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               flags |= InputMethod.SHOW_FORCED
 ***************
 *** 605,610 ****
---- 651,657 ----
+--- 655,661 ----
       }
       
       private int getAppShowFlags() {
@@ -232,7 +266,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           }
           final SessionState session = mCurClient.curSession;
           if (initial) {
---- 662,672 ----
+--- 666,676 ----
       }
       
       InputBindResult attachNewInputLocked(boolean initial, boolean needResult) {
@@ -246,7 +280,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           if (initial) {
 ***************
 *** 640,645 ****
---- 688,700 ----
+--- 692,704 ----
       InputBindResult startInputLocked(IInputMethodClient client,
               IInputContext inputContext, EditorInfo attribute,
               boolean initial, boolean needResult) {
@@ -262,7 +296,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               return mNoBinding;
 ***************
 *** 730,735 ****
---- 785,791 ----
+--- 789,795 ----
       }
       
       InputBindResult startInputInnerLocked() {
@@ -293,7 +327,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           synchronized (mMethodMap) {
               if (mCurIntent != null && name.equals(mCurIntent.getComponent())) {
                   mCurMethod = IInputMethod.Stub.asInterface(service);
---- 832,910 ----
+--- 836,943 ----
       public InputBindResult startInput(IInputMethodClient client,
               IInputContext inputContext, EditorInfo attribute,
               boolean initial, boolean needResult) {
@@ -311,17 +345,46 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           synchronized (mMethodMap) {
               final long ident = Binder.clearCallingIdentity();
               try {
+! // 2010/2/12
 !             	if (inputContext != null) {
 !             		updateSession(inputContext.asBinder(), attribute);
 !             	}
 !             	return startInputLocked(client, inputContext, attribute,
+!                         initial, needResult);
+! /*            	
+!             	InputBindResult result = startInputLocked(client, inputContext, attribute,
                           initial, needResult);
++             	if (result != null && !initial) {
++                 	String methodId = this.getDesiredInputMethod(inputContext.asBinder(), attribute);
++                 	if (methodId != null) {
++                 		this.setInputMethodLocked(methodId);
++                 	}
++             	}
++             	return result;
++ */            	
               } finally {
                   Binder.restoreCallingIdentity(ident);
               }
           }
       }
 +  // IMF extension
++     // 2010/2/12
++     private String getDesiredInputMethod(IBinder context, EditorInfo editorInfo) {
++     	if (context == null) return null;
++     	
++ 		// Application specifies an inputmethod
++     	if (editorInfo != null) {
++     		String langId = getLanguageSpecified(editorInfo);
++     		if (langId != null)
++     			return this.getDefaultIME(langId);
++     	}
++     	// The context has the inputmethod specified
++        	SessionState sessionStatus = this.mConnections.get(context);
++     	if (sessionStatus == null) return null;
++     	
++     	return sessionStatus.methodId;
++     }
++ 
 +     private String getLanguageSpecified(EditorInfo editorInfo) {
 +     	if (editorInfo == null) return null;
 +     	return editorInfo.privateImeOptions;
@@ -388,7 +451,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                       InputBindResult res = attachNewInputLocked(true, true);
                       if (res.method != null) {
                           executeOrSendMessage(mCurClient.client, mCaller.obtainMessageOO(
---- 928,952 ----
+--- 961,985 ----
       }
   
       void onSessionCreated(IInputMethod method, IInputMethodSession session) {
@@ -399,7 +462,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                   if (mCurClient != null) {
 +                 	
 + // IMF extension
-+ // M.Uno 2010/2/1
++ // 2010/2/1
 +                     if (DEBUG) Log.i(TAG, "curMethodId = " + this.mCurMethodId);
                       mCurClient.curSession = new SessionState(mCurClient,
 !                             mCurMethodId, method, session);
@@ -430,12 +493,12 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           if (mCurToken != null) {
               try {
                   if (DEBUG) Log.v(TAG, "Removing window token: " + mCurToken);
---- 955,978 ----
+--- 988,1014 ----
                   }
               }
           }
 + // IMF extension
-+        if (DEBUG) Log.i(TAG, "changing IME... done" + this.mCurMethodId);
++        if (DEBUG) Log.i(TAG, "changing IME... done. " + this.mCurMethodId);
 +        this.mChangingIME = false;
 + // IMF extension
 + 
@@ -443,10 +506,13 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
       
       void unbindCurrentMethodLocked(boolean reportToClient) {
 +         if (DEBUG) Log.i(TAG, "unbindCurrentMethodLocked:");
++ // IMF extension
++ // 2010/2/10        
           if (mHaveConnection) {
 !         	mContext.unbindService(this);
               mHaveConnection = false;
           }
+! // IMF extension
 ! 
 !         if (DEBUG) {
 !             if (mCurToken != null) Log.i(TAG, "mCurToken = " + this.mCurToken.toString());
@@ -456,8 +522,11 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               try {
                   if (DEBUG) Log.v(TAG, "Removing window token: " + mCurToken);
 ***************
-*** 856,872 ****
-      }
+*** 853,872 ****
+              executeOrSendMessage(mCurClient.client, mCaller.obtainMessageIO(
+                      MSG_UNBIND_METHOD, mCurSeq, mCurClient.client));
+          }
+!     }
       
       void clearCurMethodLocked() {
           if (mCurMethod != null) {
@@ -474,20 +543,22 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           synchronized (mMethodMap) {
               if (DEBUG) Log.v(TAG, "Service disconnected: " + name
                       + " mCurIntent=" + mCurIntent);
---- 992,1015 ----
-      }
+--- 1025,1050 ----
+              executeOrSendMessage(mCurClient.client, mCaller.obtainMessageIO(
+                      MSG_UNBIND_METHOD, mCurSeq, mCurClient.client));
+          }
+! }
       
       void clearCurMethodLocked() {
 +         if (DEBUG) Log.i(TAG, "clearCurMethodLocked:");
           if (mCurMethod != null) {
 ! // IMF extension
-! // M.Uno 2010/2/1
-! /*
+! // 2010/2/1
+! 
 !         	for (ClientState cs : mClients.values()) {
                   cs.sessionRequested = false;
                   cs.curSession = null;
               }
-+ */
 + // IMF extension
               mCurMethod = null;
           }
@@ -501,7 +572,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                       + " mCurIntent=" + mCurIntent);
 ***************
 *** 887,892 ****
---- 1030,1036 ----
+--- 1065,1071 ----
       }
   
       public void updateStatusIcon(IBinder token, String packageName, int iconId) {
@@ -525,12 +596,12 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           if (id != null && id.length() > 0) {
               try {
                   setInputMethodLocked(id);
---- 1054,1070 ----
+--- 1089,1105 ----
               Binder.restoreCallingIdentity(ident);
           }
       }
 ! // IMF extension
-! // M. Uno 2010/1/25     
+! //2010/1/25     
       void updateFromSettingsLocked() {
 !         if (DEBUG) Log.i(TAG, "updateFromSettingsLocked:");
 !        // We are assuming that whoever is changing DEFAULT_INPUT_METHOD and
@@ -545,7 +616,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                   setInputMethodLocked(id);
 ***************
 *** 933,939 ****
---- 1080,1116 ----
+--- 1115,1151 ----
           }
       }
       
@@ -599,7 +670,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                   Intent intent = new Intent(Intent.ACTION_INPUT_METHOD_CHANGED);
                   intent.putExtra("input_method_id", id);
                   mContext.sendBroadcast(intent);
---- 1119,1141 ----
+--- 1154,1176 ----
           if (id.equals(mCurMethodId)) {
               return;
           }
@@ -625,7 +696,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                   mContext.sendBroadcast(intent);
 ***************
 *** 962,967 ****
---- 1148,1154 ----
+--- 1183,1189 ----
       
       public boolean showSoftInput(IInputMethodClient client, int flags,
               ResultReceiver resultReceiver) {
@@ -635,7 +706,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               synchronized (mMethodMap) {
 ***************
 *** 989,994 ****
---- 1176,1182 ----
+--- 1211,1217 ----
       }
       
       boolean showCurrentInputLocked(int flags, ResultReceiver resultReceiver) {
@@ -645,7 +716,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               mShowExplicitlyRequested = true;
 ***************
 *** 1026,1031 ****
---- 1214,1220 ----
+--- 1249,1255 ----
       
       public boolean hideSoftInput(IInputMethodClient client, int flags,
               ResultReceiver resultReceiver) {
@@ -655,7 +726,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               synchronized (mMethodMap) {
 ***************
 *** 1053,1058 ****
---- 1242,1248 ----
+--- 1277,1283 ----
       }
       
       boolean hideCurrentInputLocked(int flags, ResultReceiver resultReceiver) {
@@ -665,7 +736,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               if (DEBUG) Log.v(TAG,
 ***************
 *** 1082,1087 ****
---- 1272,1278 ----
+--- 1307,1313 ----
       public void windowGainedFocus(IInputMethodClient client, IBinder windowToken,
               boolean viewHasFocus, boolean isTextEditor, int softInputMode,
               boolean first, int windowFlags) {
@@ -675,7 +746,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               synchronized (mMethodMap) {
 ***************
 *** 1168,1173 ****
---- 1359,1365 ----
+--- 1394,1400 ----
       }
       
       public void showInputMethodPickerFromClient(IInputMethodClient client) {
@@ -685,7 +756,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                       || mCurClient.client.asBinder() != client.asBinder()) {
 ***************
 *** 1179,1184 ****
---- 1371,1377 ----
+--- 1406,1412 ----
       }
   
       public void setInputMethod(IBinder token, String id) {
@@ -695,7 +766,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                   if (mContext.checkCallingOrSelfPermission(
 ***************
 *** 1203,1208 ****
---- 1396,1402 ----
+--- 1431,1437 ----
       }
   
       public void hideMySoftInput(IBinder token, int flags) {
@@ -705,7 +776,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                   Log.w(TAG, "Ignoring hideInputMethod of token: " + token);
 ***************
 *** 1218,1223 ****
---- 1412,1418 ----
+--- 1447,1453 ----
       }
       
       public void showMySoftInput(IBinder token, int flags) {
@@ -715,7 +786,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                   Log.w(TAG, "Ignoring hideInputMethod of token: " + token);
 ***************
 *** 1233,1238 ****
---- 1428,1434 ----
+--- 1463,1469 ----
       }
   
       void setEnabledSessionInMainThread(SessionState session) {
@@ -725,7 +796,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
                   try {
 ***************
 *** 1253,1258 ****
---- 1449,1455 ----
+--- 1484,1490 ----
       }
       
       public boolean handleMessage(Message msg) {
@@ -735,7 +806,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               case MSG_SHOW_IM_PICKER:
 ***************
 *** 1353,1363 ****
---- 1550,1563 ----
+--- 1585,1598 ----
       }
   
       private boolean isSystemIme(InputMethodInfo inputMethod) {
@@ -752,7 +823,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
               Settings.Secure.putString(mContext.getContentResolver(),
 ***************
 *** 1371,1376 ****
---- 1571,1577 ----
+--- 1606,1612 ----
   
       void buildInputMethodListLocked(ArrayList<InputMethodInfo> list,
               HashMap<String, InputMethodInfo> map) {
@@ -762,7 +833,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           
 ***************
 *** 1500,1505 ****
---- 1701,1707 ----
+--- 1736,1742 ----
       }
       
       void hideInputMethodMenu() {
@@ -772,7 +843,7 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           }
 ***************
 *** 1521,1526 ****
---- 1723,1729 ----
+--- 1758,1764 ----
       // ----------------------------------------------------------------------
       
       public boolean setInputMethodEnabled(String id, boolean enabled) {
@@ -780,3 +851,23 @@ diff -cr android-ws.org/frameworks/base/services/java/com/android/server/InputMe
           synchronized (mMethodMap) {
               if (mContext.checkCallingOrSelfPermission(
                       android.Manifest.permission.WRITE_SECURE_SETTINGS)
+diff -crN android-ws.org/frameworks/base/services/java/com/android/server/WindowManagerService.java android-ws/frameworks/base/services/java/com/android/server/WindowManagerService.java
+*** android-ws.org/frameworks/base/services/java/com/android/server/WindowManagerService.java	2010-01-28 17:59:42.604000849 +0900
+--- android-ws/frameworks/base/services/java/com/android/server/WindowManagerService.java	2010-02-10 10:59:45.826020006 +0900
+***************
+*** 135,141 ****
+      static final boolean DEBUG_ANIM = false;
+      static final boolean DEBUG_LAYERS = false;
+      static final boolean DEBUG_INPUT = false;
+!     static final boolean DEBUG_INPUT_METHOD = false;
+      static final boolean DEBUG_VISIBILITY = false;
+      static final boolean DEBUG_WINDOW_MOVEMENT = false;
+      static final boolean DEBUG_ORIENTATION = false;
+--- 135,141 ----
+      static final boolean DEBUG_ANIM = false;
+      static final boolean DEBUG_LAYERS = false;
+      static final boolean DEBUG_INPUT = false;
+!     static final boolean DEBUG_INPUT_METHOD = true;
+      static final boolean DEBUG_VISIBILITY = false;
+      static final boolean DEBUG_WINDOW_MOVEMENT = false;
+      static final boolean DEBUG_ORIENTATION = false;

@@ -1,4 +1,4 @@
-diff -cr android-ws.org/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java android-ws/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java
+diff -crN android-ws.org/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java android-ws/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java
 *** android-ws.org/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java	2010-01-28 17:59:42.714563301 +0900
 --- android-ws/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java	2010-01-30 04:47:25.772193017 +0900
 ***************
@@ -18,9 +18,9 @@ diff -cr android-ws.org/frameworks/base/core/java/android/inputmethodservice/Inp
       
       InputMethodManager mImm;
       
-diff -cr android-ws.org/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java android-ws/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java
+diff -crN android-ws.org/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java android-ws/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java
 *** android-ws.org/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java	2010-01-28 17:59:42.714563301 +0900
---- android-ws/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java	2010-02-02 21:10:31.434360975 +0900
+--- android-ws/frameworks/base/core/java/android/view/inputmethod/InputMethodManager.java	2010-02-09 21:15:58.804868869 +0900
 ***************
 *** 48,53 ****
 --- 48,54 ----
@@ -89,7 +89,7 @@ diff -cr android-ws.org/frameworks/base/core/java/android/view/inputmethod/Input
               // connected so we want to restart it.
               final boolean initial = mCurrentTextBoxAttribute == null;
 ! // IMF extension            
-! // M.Uno 2010/2/1
+! // 2010/2/1
               // Hook 'em up and let 'er rip.
               mCurrentTextBoxAttribute = tba;
               mServedConnecting = false;
@@ -112,7 +112,17 @@ diff -cr android-ws.org/frameworks/base/core/java/android/view/inputmethod/Input
               
               try {
                   if (DEBUG) Log.v(TAG, "START INPUT: " + view + " ic="
-diff -cr android-ws.org/frameworks/base/core/java/android/widget/TextView.java android-ws/frameworks/base/core/java/android/widget/TextView.java
+***************
+*** 1060,1065 ****
+--- 1069,1075 ----
+                      scheduleCheckFocusLocked(view);
+                  }
+              }
++ 
+          }
+      }
+  
+diff -crN android-ws.org/frameworks/base/core/java/android/widget/TextView.java android-ws/frameworks/base/core/java/android/widget/TextView.java
 *** android-ws.org/frameworks/base/core/java/android/widget/TextView.java	2010-01-28 17:59:42.724562838 +0900
 --- android-ws/frameworks/base/core/java/android/widget/TextView.java	2010-02-02 21:09:56.244713833 +0900
 ***************
