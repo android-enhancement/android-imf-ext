@@ -1,0 +1,40 @@
+Proposal of extensions for Android IMF
+
+1. Requirement
+1-1. Architecture
+ Default IME instance for each applications
+ IME instance binding hte context in the application
+ One more IME instances running on Android OS simultaneously
+ IME instance management base on memory amount and status
+
+1-2. New concept
+  Introduction of new IME concept, classification and taxonomy
+  IME capability
+  Mandatory indicator for IME
+
+1-3. New functionalities
+  IME switching API
+  Query & set API for IME capability
+  Character subsetting API
+
+1-4. Extensibility
+  Multi-layer model that enables to support multi-language by adding the IMLogic.
+
+2. Implementations
+2-1. The way system selects the IME(default IME)
+ If the application does not specify the IME, system will provide the default IME which depends on the OS's language property.
+
+2-2. Trusted IME
+ IME takes users' keyinputs and can behavior as a malware. Therefore, Android OS must have the framework which can restrict the IME behaviors based on the trust between users and IME.
+
+When they install IME on Andoid market, they will make their decision whether they trust it by the application information, the developer's name and the company name.
+Smetimes, however, they might try an unknown IME, that means untrusted IME, or they might not install it.
+
+Users can select an untrusted IME using the inputmethod dialog.
+If application select it, they can make their decision to use it by the alert dialog that shows application is about to use an untrusted IME.
+
+2-3. The way applications specify the IME
+ Application can specify the IME using the editText property, e.g. language,   or IME switching API that Android OS provides. Setting the property is a static way and using API is a dynamic way for selecting IME.
+
+2-4. Mandantory indicator for IME
+ What IME as well as applications have their mandantory indicator is valid for contrusting the relationship with users. IME and applications can access users' personal information, contacts, credit card number and so on. Therefore, users can have their relief by visualizing what IME and applications are doing.

@@ -1,0 +1,61 @@
+Project
+  IMF extension for Android OS
+
+1. Sumamry
+  This project’s goal is to enhance Android IMF so that users have the comfortable input environment on it. 
+
+2.Files
+  README
+    readme written in English.
+
+  doc
+    There are a few documents in this directory.
+
+  images
+    This is an Android OS system image, system.img, that contains my proposal. You can try my proposal using the emulator in Android SDK 1.6 or later.
+
+  android-ws
+    This is a part of android source code that I modified, not a full part of it.
+
+  patch
+    There are three differential files. I created them using unix diff command as follow:
+    diff -cr original modified
+
+  samples
+    A sample application, PinyinIME, with the custom installer.
+　　PinyinIME is a Chinese IME included in android source branch.
+
+  script
+    This is a script that merge my modification to original android source with diff files.
+
+3. Getting started
+   causions: This project will consume 188MB on your hard drive.
+
+   1) Download this project from the github.
+     $ git clone git://github.com/android-enhancement/android-imf-ext.git
+
+   2) Copy the system.img.
+     $ cd your_android_sdk_dir/platform/android-2.1/images
+     $ cp system.img system.img.org  // backup your system.img
+     $ cp somewhere/android-imf-ext/images/system.img .
+
+  
+   3) Run your emulator.
+    $ cd your_android_sdk_dir/tools
+    $ ./emulator -avd your_device
+
+   4) Install IMEs.
+    $ cd your_android_sdk_dir/tools
+    $ ./adb install somewhere/android-imf-ext/demo/ime/PinyinIME.apk
+    $ ./adb install somewhere/android-imf-ext/demo/ime/OpenWnn.apk
+
+
+   5) Set them truested
+     Please set installed IMEs trusted in Settings/Language & keyboard dialog.
+  
+   6) Install a demo application.
+    $ ./adb install somewhere/android-imf-ext/demo/ime/IMFDemo.apk
+
+4. Reference
+   [1]How IM is dangerous? [Was: Re: How to set default IME in the code]
+   http://groups.google.com/group/android-platform/browse_thread/thread/beaaef099e7e9256/7efd6b0aa7bf632e#7efd6b0aa7bf632e
